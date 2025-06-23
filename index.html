@@ -1,0 +1,199 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>StatusRelay: Everything is Down Dashboard</title>
+    <style>
+        body {
+            font-family: sans-serif;
+            margin: 20px;
+            background-color: #f4f4f4;
+            color: #333;
+        }
+        .container {
+            max-width: 800px;
+            margin: 0 auto;
+            background-color: #fff;
+            padding: 30px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        h1 {
+            color: #2c3e50;
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        /* New CSS for search bar */
+        .search-bar {
+            text-align: center;
+            margin-bottom: 20px; /* Spacing below the search bar */
+        }
+        #searchInput {
+            width: 100%;
+            max-width: 400px; /* Limit width for larger screens */
+            padding: 10px 15px;
+            border: 1px solid #ddd;
+            border-radius: 5px;
+            font-size: 1em;
+            box-sizing: border-box; /* Include padding/border in element's total width/height */
+        }
+
+        .status-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 20px;
+        }
+        .service-card {
+            border: 1px solid #ddd;
+            padding: 15px;
+            border-radius: 5px;
+            background-color: #f9f9f9;
+            text-align: center;
+            transition: transform 0.2s ease; /* Smooth hover effect */
+        }
+        .service-card:hover {
+            transform: translateY(-3px); /* Lift card slightly on hover */
+            box-shadow: 0 4px 8px rgba(0,0,0,0.15);
+        }
+
+        .status-indicator {
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            display: inline-block;
+            margin-right: 10px;
+            vertical-align: middle;
+        }
+        .status-green { background-color: #2ecc71; } /* Operational */
+        .status-yellow { background-color: #f1c40f; } /* Degraded Performance */
+        .status-orange { background-color: #e67e22; } /* Partial Outage */
+        .status-red { background-color: #e74c3c; }   /* Major Outage */
+        .status-grey { background-color: #95a5a6; }  /* Unknown/Error */
+
+
+        .service-name {
+            font-weight: bold;
+            font-size: 1.1em;
+            margin-bottom: 5px;
+            display: flex; /* Use flex to align indicator and name */
+            align-items: center;
+            justify-content: center; /* Center content horizontally */
+        }
+        .service-message {
+            font-size: 0.9em;
+            color: #555;
+            margin-bottom: 10px;
+        }
+        .service-url a {
+            color: #3498db;
+            text-decoration: none;
+            font-size: 0.8em;
+        }
+        .service-url a:hover {
+            text-decoration: underline;
+        }
+        .last-updated {
+            text-align: center;
+            margin-top: 30px;
+            font-size: 0.9em;
+            color: #777;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>StatusRelay: Your External Dependency Mission Control</h1>
+
+        <div id="notification-banner" style="display:none; background:#e74c3c; color:#fff; padding:10px; text-align:center; border-radius:5px; margin-bottom:15px;"></div>
+        <div class="search-bar">
+            <input type="text" id="searchInput" placeholder="Search services..." onkeyup="filterServices()">
+        </div>
+
+        <div class="status-grid" id="status-grid">
+            </div>
+        <p class="last-updated" id="last-updated"></p>
+    </div>
+
+    <script>
+        // Notification and bug alert logic
+        function showNotification(message) {
+            const banner = document.getElementById('notification-banner');
+            banner.textContent = message;
+            banner.style.display = 'block';
+        }
+        function hideNotification() {
+            const banner = document.getElementById('notification-banner');
+            banner.style.display = 'none';
+        }
+        async function fetchStatuses() {
+            try {
+                const response = await fetch('/api/status');
+                const data = await response.json();
+                const statusGrid = document.getElementById('status-grid');
+                statusGrid.innerHTML = '';
+                let anyDown = false;
+                let downServices = [];
+                for (const serviceName in data) {
+                    const serviceInfo = data[serviceName];
+                    const serviceCard = document.createElement('div');
+                    serviceCard.classList.add('service-card');
+                    const indicatorColorClass = serviceInfo.color ? `status-${serviceInfo.color}` : 'status-grey';
+                    // Simulate uptime for now (in real app, fetch from backend/db)
+                    let uptime = serviceInfo.uptime || (serviceInfo.color === 'green' ? '99.99%' : (serviceInfo.color === 'yellow' ? '98.5%' : '95.0%'));
+                    serviceCard.innerHTML = `
+                        <div class="service-name">
+                            <span class="status-indicator ${indicatorColorClass}"></span>
+                            ${serviceName}
+                        </div>
+                        <div class="service-message">${serviceInfo.message}</div>
+                        <div class="service-uptime">Uptime: <span>${uptime}</span></div>
+                        <div class="service-url"><a href="${serviceInfo.url}" target="_blank">View Status Page</a></div>
+                    `;
+                    statusGrid.appendChild(serviceCard);
+                    if (serviceInfo.color !== 'green') {
+                        anyDown = true;
+                        downServices.push(`${serviceName}: ${serviceInfo.message}`);
+                    }
+                }
+                if (anyDown) {
+                    showNotification('Attention: Some services are down or degraded!\n' + downServices.join('\n'));
+                } else {
+                    hideNotification();
+                }
+                document.getElementById('last-updated').textContent = `Last updated: ${new Date().toLocaleTimeString()}`;
+            } catch (error) {
+                console.error("Error fetching statuses:", error);
+                document.getElementById('status-grid').innerHTML = '<p style="color: red; text-align: center;">Could not load service statuses. Please try again later.</p>';
+                showNotification('Error: Could not load service statuses.');
+            }
+        }
+
+        function filterServices() {
+            const input = document.getElementById('searchInput');
+            const filter = input.value.toUpperCase();
+            const grid = document.getElementById('status-grid');
+            const cards = grid.getElementsByClassName('service-card');
+
+            for (let i = 0; i < cards.length; i++) {
+                // Get the service name from the text content of the .service-name div
+                const serviceNameElement = cards[i].querySelector('.service-name');
+                // Remove the status indicator span's text content before filtering
+                const serviceName = serviceNameElement.textContent.replace(serviceNameElement.querySelector('.status-indicator')?.textContent || '', '').trim().toUpperCase();
+
+                if (serviceName.indexOf(filter) > -1) {
+                    cards[i].style.display = ""; // Show the card
+                } else {
+                    cards[i].style.display = "none"; // Hide the card
+                }
+            }
+        }
+
+        // Fetch statuses immediately on page load
+        fetchStatuses();
+
+        // Refresh statuses every 30 seconds
+        setInterval(fetchStatuses, 30000); 
+    </script>
+</body>
+</html>
